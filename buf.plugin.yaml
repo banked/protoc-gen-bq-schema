@@ -1,0 +1,6 @@
+version: v1
+name: buf.bnkd.dev/platform/protoc-gen-bq-schema
+plugin_version: v1.0.0
+source_url: https://github.com/banked/protoc-gen-bq-schema
+output_languages:
+  - go

@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - "buf.plugin.yaml"
+
+jobs:
+  push:
+    name: Push to bnkd.buf.dev
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Plugin Version
+        id: plugin
+        run: echo "version=$(cat ./buf.plugin.yaml | yq .plugin_version)" >> $GITHUB_OUTPUT
+
+      - name: Setup buf.build CLI
+        uses: bufbuild/buf-setup-action@v1
+        with:
+          github_token: ${{ secrets.BANKED_ACCESS_TOKEN }}
+
+      - name: Login to buf.bnkd.dev
+        run: |
+          echo ${{ secrets.BUF_ENTERPRISE_TOKEN }} | buf registry login buf.bnkd.dev --username github --token-stdin
+
+      - name: Setup buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Set Docker Meta
+        id: meta
+        uses: docker/metadata-action@v4
+        with:
+          tags: ${{ steps.plugin.outputs.version }}
+          images: |
+            buf.bnkd.dev/platform/protoc-gen-bq-schema
+
+      - name: Build
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          load: true
+          push: false
+
+      - name: Push
+        run: |
+          docker images
+          buf alpha plugin push \
+            --image buf.bnkd.dev/platform/protoc-gen-bq-schema:${{ steps.plugin.outputs.version }}
+
+      - name: Build Changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ${{ steps.plugin.outputs.version }}
+          tag_name: ${{ steps.plugin.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
